@@ -7,7 +7,6 @@ const {
 } = require('@aws-sdk/lib-dynamodb');
 
 const Tasks_Table = 'tasks';
-const Projects_Table = 'projects';
 
 exports.getAllTasks = async (req, res, next) => {
   try {
@@ -28,7 +27,7 @@ exports.getAllTasks = async (req, res, next) => {
 
 exports.createTask = async (req, res, next) => {
   try {
-      const { title } = req.body;
+      const { title, description, projectId = null, priority, status} = req.body;
   
       if (!title) {
         return res.status(400).json({
@@ -38,19 +37,20 @@ exports.createTask = async (req, res, next) => {
   
       const newTask = {
         id: Date.now().toString(),
+        projectId, 
         title,
-        completed: false,
+        description,
+        priority,
+        status,
         createdAt: new Date().toISOString()
       };
-  
-      await docClient.send(
-        new PutCommand({
-          TableName: TABLE_NAME,
+
+      const response = await docClient.send(new PutCommand({
+          TableName: Tasks_Table,
           Item: newTask
-        })
-      );
-  
-      res.status(201).json(newTask);
+        }));
+      res.status(201).json(response.Attributes)
+
   
     } catch (error) {
       console.error(error);
@@ -63,73 +63,36 @@ exports.createTask = async (req, res, next) => {
 
 // UPDATE TASK TITLE
 exports.updateTask = async (req, res, next) => {
+  const { id } = req.params;
+  const safeUpdates = { ...req.body };
+  delete safeUpdates.id;
+
+  const keys = Object.keys(safeUpdates);
+  if (keys.length === 0) return; 
+
+  // Dynamically build the clauses
+  const updateExpressions = keys.map(key => `#${key} = :${key}`);
+  const expressionAttributeNames = {};
+  const expressionAttributeValues = {};
+
+  keys.forEach(key => {
+    expressionAttributeNames[`#${key}`] = key;
+    expressionAttributeValues[`:${key}`] = safeUpdates[key];
+  });
+
+  const params = {
+    TableName: Tasks_Table,
+    Key: { id }, 
+    UpdateExpression: `SET ${updateExpressions.join(", ")}`,
+    ExpressionAttributeNames: expressionAttributeNames,
+    ExpressionAttributeValues: expressionAttributeValues, 
+    ReturnValues: "ALL_NEW"
+  };
+
   try {
-    const { id } = req.params;
-    const { title } = req.body;
-
-    if (!title) {
-        return res.status(400).json({
-            error: 'Title is required for update'
-        });
-    }
-
-    await docClient.send(
-      new UpdateCommand({
-        TableName: TABLE_NAME,
-        Key: { id },
-        UpdateExpression: 'SET title = :title',
-        ExpressionAttributeValues: {
-          ':title': title
-        },
-        ReturnValues: 'ALL_NEW'
-      })
-    );
-
-    res.json({
-      message: 'Task updated successfully',
-      updatedTask: { id, title, completed: '...' } // Could return the full updated item if needed
-    });
-
+    const response = await docClient.send(new UpdateCommand(params));
+    res.status(200).json(response.Attributes)
   } catch (error) {
-    console.error('Error in updateTaskTitle:', error);
-    res.status(500).json({
-      error: error.message
-    });
-  }
-};
-
-
-// TOGGLE COMPLETE
-exports.toggleTaskComplete = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { completed } = req.body;
-
-    if (typeof completed !== 'boolean') {
-        return res.status(400).json({
-            error: 'Completed status (boolean) is required'
-        });
-    }
-
-    await docClient.send(
-      new UpdateCommand({
-        TableName: TABLE_NAME,
-        Key: { id },
-        UpdateExpression: 'SET completed = :completed',
-        ExpressionAttributeValues: {
-          ':completed': completed
-        },
-        ReturnValues: 'ALL_NEW'
-      })
-    );
-
-    res.json({
-      message: 'Task status updated successfully',
-      updatedTask: { id, completed }
-    });
-
-  } catch (error) {
-    console.error('Error in toggleTaskComplete:', error);
     res.status(500).json({
       error: error.message
     });
@@ -144,7 +107,7 @@ exports.deleteTask = async (req, res, next) => {
 
     await docClient.send(
       new DeleteCommand({
-        TableName: TABLE_NAME,
+        TableName: Tasks_Table,
         Key: { id }
       })
     );

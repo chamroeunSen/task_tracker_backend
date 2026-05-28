@@ -1,3 +1,4 @@
+const { nanoid } = require('nanoid');
 const { docClient } = require('../services/dynamodb.js');
 const {
   ScanCommand,
@@ -6,7 +7,6 @@ const {
   DeleteCommand
 } = require('@aws-sdk/lib-dynamodb');
 
-// Define the DynamoDB Table Name for Projects
 const Projects_Table = 'projects';
 
 exports.getAllProjects = async (req, res, next) => {
@@ -28,28 +28,28 @@ exports.getAllProjects = async (req, res, next) => {
 
 exports.createProject = async (req, res, next) => {
   try {
-    const { projectId, projectName } = req.body;
+    const { projectName } = req.body;
 
-    if (!projectName || !projectId) {
+    if ( !projectName ) {
       return res.status(400).json({
-        error: 'Project id/name is required'
+        error: 'Project name is required'
       });
     }
 
+    const projId = nanoid(8)
+
     const newProject = {
-      projectId,
+      projectId: projId,
       projectName,
       createdAt: new Date().toISOString()
     };
 
-    await docClient.send(
+    const response = await docClient.send
       new PutCommand({
         TableName: Projects_Table,
         Item: newProject
-      })
-    );
-
-    res.status(201).json(newProject);
+      });
+    res.status(201).json(response.Attributes)
 
   } catch (error) {
     console.error('Error in createProject:', error);
@@ -70,25 +70,16 @@ exports.updateProjectName = async (req, res, next) => {
       });
     }
 
-    await docClient.send(
-      new UpdateCommand({
+    const response = await docClient.send(new UpdateCommand({
         TableName: Projects_Table,
         Key: { projectId },
-        // 1. Added the SET keyword
         UpdateExpression: 'SET projectName = :val',
-        // 2. Added the actual value for :val
         ExpressionAttributeValues: {
           ':val': projectName
         },
         ReturnValues: 'ALL_NEW'
-      })
-    );
-
-    res.json({
-      message: 'Project name updated successfully',
-      updatedProject: { projectId, projectName, status: 'Active' } // Return necessary fields
-    });
-
+      }));
+    res.status(200).json(response.Attributes)
   } catch (error) {
     console.error('Error in updateProjectName:', error);
     res.status(500).json({
