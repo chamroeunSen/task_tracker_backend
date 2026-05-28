@@ -6,6 +6,7 @@ const {
   UpdateCommand,
   DeleteCommand
 } = require('@aws-sdk/lib-dynamodb');
+const { buildUpdateParams } = require('../utils/updateParams.js');
 
 const Projects_Table = 'projects';
 
@@ -28,9 +29,9 @@ exports.getAllProjects = async (req, res, next) => {
 
 exports.createProject = async (req, res, next) => {
   try {
-    const { projectName } = req.body;
+    const { projectName, projectDescription } = req.body;
 
-    if ( !projectName ) {
+    if (!projectName) {
       return res.status(400).json({
         error: 'Project name is required'
       });
@@ -41,17 +42,20 @@ exports.createProject = async (req, res, next) => {
     const newProject = {
       projectId: projId,
       projectName,
+      projectDescription,
       createdAt: new Date().toISOString()
     };
 
-    const response = await docClient.send
+    const response = await docClient.send(
       new PutCommand({
         TableName: Projects_Table,
         Item: newProject
-      });
-    res.status(201).json(response.Attributes)
+      })
+    );
+    res.status(201).json(newProject);
 
   } catch (error) {
+    console.log("eer", error)
     console.error('Error in createProject:', error);
     res.status(500).json({
       error: error.message
@@ -62,23 +66,9 @@ exports.createProject = async (req, res, next) => {
 exports.updateProjectName = async (req, res, next) => {
   try {
     const { projectId } = req.params;
-    const { name } = req.body;
 
-    if (!name) {
-      return res.status(400).json({
-        error: 'Project name is required for update'
-      });
-    }
+    const params = buildUpdateParams(Projects_Table, { projectId }, req.body);
 
-    const response = await docClient.send(new UpdateCommand({
-        TableName: Projects_Table,
-        Key: { projectId },
-        UpdateExpression: 'SET projectName = :val',
-        ExpressionAttributeValues: {
-          ':val': projectName
-        },
-        ReturnValues: 'ALL_NEW'
-      }));
     res.status(200).json(response.Attributes)
   } catch (error) {
     console.error('Error in updateProjectName:', error);

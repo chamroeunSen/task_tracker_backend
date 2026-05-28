@@ -5,6 +5,8 @@ const {
   UpdateCommand,
   DeleteCommand
 } = require('@aws-sdk/lib-dynamodb');
+const { buildUpdateParams } = require('../utils/updateParams.js');
+
 
 const Tasks_Table = 'tasks';
 
@@ -64,30 +66,7 @@ exports.createTask = async (req, res, next) => {
 // UPDATE TASK TITLE
 exports.updateTask = async (req, res, next) => {
   const { id } = req.params;
-  const safeUpdates = { ...req.body };
-  delete safeUpdates.id;
-
-  const keys = Object.keys(safeUpdates);
-  if (keys.length === 0) return; 
-
-  // Dynamically build the clauses
-  const updateExpressions = keys.map(key => `#${key} = :${key}`);
-  const expressionAttributeNames = {};
-  const expressionAttributeValues = {};
-
-  keys.forEach(key => {
-    expressionAttributeNames[`#${key}`] = key;
-    expressionAttributeValues[`:${key}`] = safeUpdates[key];
-  });
-
-  const params = {
-    TableName: Tasks_Table,
-    Key: { id }, 
-    UpdateExpression: `SET ${updateExpressions.join(", ")}`,
-    ExpressionAttributeNames: expressionAttributeNames,
-    ExpressionAttributeValues: expressionAttributeValues, 
-    ReturnValues: "ALL_NEW"
-  };
+  const params = buildUpdateParams(Tasks_Table, { id }, req.body);
 
   try {
     const response = await docClient.send(new UpdateCommand(params));
@@ -99,7 +78,7 @@ exports.updateTask = async (req, res, next) => {
   }
 };
 
-
+  
 // DELETE TASK
 exports.deleteTask = async (req, res, next) => {
   try {
