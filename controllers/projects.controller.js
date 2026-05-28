@@ -66,9 +66,8 @@ exports.createProject = async (req, res, next) => {
 exports.updateProjectName = async (req, res, next) => {
   try {
     const { projectId } = req.params;
-
     const params = buildUpdateParams(Projects_Table, { projectId }, req.body);
-
+    const response = await docClient.send(new UpdateCommand(params));
     res.status(200).json(response.Attributes)
   } catch (error) {
     console.error('Error in updateProjectName:', error);
